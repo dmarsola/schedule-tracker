@@ -1,125 +1,191 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Permission.camera.request();
+  await Permission.notification.request();
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Schedule QR Scanner',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: QRScannerScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class QRScannerScreen extends StatefulWidget {
+  const QRScannerScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  _QRScannerScreenState createState() => _QRScannerScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _QRScannerScreenState extends State<QRScannerScreen> {
+  bool _scanned = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  void _onDetect(BarcodeCapture barcode) {
+    if (_scanned) return;
+    final data = barcode.barcodes.first.rawValue;
+    if (data != null) {
+      setState(() => _scanned = true);
+      final parsed = jsonDecode(data);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ScheduleScreen(scheduleData: parsed),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      appBar: AppBar(title: Text("Scan QR Code")),
+      body: MobileScanner(onDetect: _onDetect),
+    );
+  }
+}
+
+class ScheduleScreen extends StatefulWidget {
+  final Map<String, dynamic> scheduleData;
+  const ScheduleScreen({super.key, required this.scheduleData});
+
+  @override
+  _ScheduleScreenState createState() => _ScheduleScreenState();
+}
+
+class _ScheduleScreenState extends State<ScheduleScreen> {
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+  List<Map<String, dynamic>> schedule = [];
+  List<bool> toggles = [];
+
+  final Map<String, IconData> iconMap = {
+    "bed": FontAwesomeIcons.bed,
+    "tooth": FontAwesomeIcons.tooth,
+    "breakfast": FontAwesomeIcons.mugSaucer,
+    "uniform": FontAwesomeIcons.shirt,
+    "book": FontAwesomeIcons.book,
+    "car": FontAwesomeIcons.car,
+    "bus": FontAwesomeIcons.bus,
+    "default": FontAwesomeIcons.boltLightning,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    tz.initializeTimeZones();
+    schedule = List<Map<String, dynamic>>.from(widget.scheduleData['schedule']);
+    toggles = List.filled(schedule.length, false);
+    _initializeNotifications();
+    _scheduleNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const ios = DarwinInitializationSettings();
+    const initSettings = InitializationSettings(android: android, iOS: ios);
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
+  }
+
+  void _scheduleNotifications() async {
+    for (int i = 0; i < schedule.length; i++) {
+      final item = schedule[i];
+      if (item.containsKey('time')) {
+        final timeParts = item['time'].split(':');
+        final hour = int.parse(timeParts[0]);
+        final minute = int.parse(timeParts[1]);
+        final frequency = item['frequency'] ?? 'daily';
+
+        final androidDetails = AndroidNotificationDetails(
+          'schedule_channel',
+          'Schedule Notifications',
+          importance: Importance.max,
+          priority: Priority.high,
+        );
+        final iosDetails = DarwinNotificationDetails();
+        final details =
+            NotificationDetails(android: androidDetails, iOS: iosDetails);
+
+        final days = (frequency == 'weekdays')
+            ? [
+                DateTime.monday,
+                DateTime.tuesday,
+                DateTime.wednesday,
+                DateTime.thursday,
+                DateTime.friday
+              ]
+            : [
+                DateTime.monday,
+                DateTime.tuesday,
+                DateTime.wednesday,
+                DateTime.thursday,
+                DateTime.friday,
+                DateTime.saturday,
+                DateTime.sunday
+              ];
+
+        for (final day in days) {
+          final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+          tz.TZDateTime scheduledDate = tz.TZDateTime(
+              tz.local, now.year, now.month, now.day, hour, minute);
+          while (scheduledDate.weekday != day || scheduledDate.isBefore(now)) {
+            scheduledDate = scheduledDate.add(Duration(days: 1));
+          }
+
+          await flutterLocalNotificationsPlugin.zonedSchedule(
+            i * 10 + day, // unique ID
+            item['label'],
+            'Scheduled Task: ${item['label']}',
+            scheduledDate,
+            details,
+            matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Your Schedule")),
+      body: ListView.builder(
+        itemCount: schedule.length,
+        itemBuilder: (context, index) {
+          final item = schedule[index];
+          final iconName = item['icon'];
+          return ListTile(
+            leading: iconName != null && iconMap[iconName] != null
+                ? Icon(iconMap[iconName])
+                : Icon(iconMap['default']),
+            title: Text(item['label'], style: TextStyle(fontSize: 18)),
+            trailing: Switch(
+              value: toggles[index],
+              onChanged: (val) => setState(() => toggles[index] = val),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
