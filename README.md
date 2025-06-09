@@ -1,16 +1,11 @@
-# schedule_tracker
+# Schedule Tacker
 
-A new Flutter project.
+My friend has an autistic child and this app is intended to help her
+and other children in the spectrum to maintain a healthy schedule.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The main goals for the app are:
+- Simple, intuitive and distraction free User Interface
+- Hidden configuration section
+- Schedule is set by reading qr code
+- Child follows the schedule and toggles completion of tasks
+- If set, alerts are sent according to the schedule
