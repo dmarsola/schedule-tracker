@@ -3,19 +3,34 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'services/notification.dart';
+
+import 'constants/icons.dart';
+import 'services/storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init();
   await Permission.camera.request();
   await Permission.notification.request();
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  MyApp({super.key});
+
+  final storage = StorageService();
+
+  Future<Widget> _getInitialScreen() async {
+    final data = await storage.loadData();
+    if (data != null) {
+      return ScheduleScreen(scheduleData: data);
+    } else {
+      return QRScannerScreen();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +40,18 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: QRScannerScreen(),
+      home: FutureBuilder<Widget>(
+        future: _getInitialScreen(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Scaffold(body: Center(child: CircularProgressIndicator()));
+          } else if (snapshot.hasData) {
+            return snapshot.data!;
+          } else {
+            return Scaffold(body: Center(child: Text('Something went wrong')));
+          }
+        },
+      ),
     );
   }
 }
@@ -40,18 +66,21 @@ class QRScannerScreen extends StatefulWidget {
 class _QRScannerScreenState extends State<QRScannerScreen> {
   bool _scanned = false;
 
-  void _onDetect(BarcodeCapture barcode) {
+  Future<void> _onDetect(BarcodeCapture barcode) async {
+    final storage = StorageService();
+
     if (_scanned) return;
     final data = barcode.barcodes.first.rawValue;
     if (data != null) {
       setState(() => _scanned = true);
       final parsed = jsonDecode(data);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ScheduleScreen(scheduleData: parsed),
-        ),
-      );
+      await storage.saveData(parsed);
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (context) => ScheduleScreen(scheduleData: parsed),
+      //   ),
+      // );
     }
   }
 
@@ -78,17 +107,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<Map<String, dynamic>> schedule = [];
   List<bool> toggles = [];
 
-  final Map<String, IconData> iconMap = {
-    "bed": FontAwesomeIcons.bed,
-    "tooth": FontAwesomeIcons.tooth,
-    "breakfast": FontAwesomeIcons.mugSaucer,
-    "uniform": FontAwesomeIcons.shirt,
-    "book": FontAwesomeIcons.book,
-    "car": FontAwesomeIcons.car,
-    "bus": FontAwesomeIcons.bus,
-    "default": FontAwesomeIcons.boltLightning,
-  };
-
   @override
   void initState() {
     super.initState();
@@ -107,6 +125,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _scheduleNotifications() async {
+    // Cancel all notifications before creating new ones
+    await NotificationService().cancelAllNotifications();
     for (int i = 0; i < schedule.length; i++) {
       final item = schedule[i];
       if (item.containsKey('time')) {
@@ -121,9 +141,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           importance: Importance.max,
           priority: Priority.high,
         );
-        final iosDetails = DarwinNotificationDetails();
-        final details =
-            NotificationDetails(android: androidDetails, iOS: iosDetails);
+        // TODO: add more details as needed
+        // final iosDetails = DarwinNotificationDetails();
+        // final details =
+        //     NotificationDetails(android: androidDetails, iOS: iosDetails);
 
         final days = (frequency == 'weekdays')
             ? [
@@ -151,14 +172,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             scheduledDate = scheduledDate.add(Duration(days: 1));
           }
 
-          await flutterLocalNotificationsPlugin.zonedSchedule(
-            i * 10 + day, // unique ID
-            item['label'],
-            'Scheduled Task: ${item['label']}',
-            scheduledDate,
-            details,
-            matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          await NotificationService().scheduleNotification(
+            id: i * 10 + day, // unique ID
+            title: item['label'],
+            body: 'Scheduled Task: ${item['label']}',
+            scheduledTime: scheduledDate,
+            // details, // TODO: implement more details as needed
           );
         }
       }
