@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -9,12 +12,23 @@ import 'services/notification.dart';
 
 import 'constants/icons.dart';
 import 'services/storage.dart';
+import 'styles/general.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService().init();
   await Permission.camera.request();
   await Permission.notification.request();
+
+  if (Platform.isAndroid) {
+    final channel = MethodChannel('com.example.schedule_tracker/exact_alarm');
+    try {
+      final result = await channel.invokeMethod<bool>('openExactAlarmSettings');
+      // TODO: handle if result == false
+    } on PlatformException {
+      // TODO: handle exception
+    }
+  }
   runApp(MyApp());
 }
 
@@ -37,7 +51,13 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Schedule QR Scanner',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: AppColors.background,
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppColors.primary,
+        ),
+        textTheme: TextTheme(
+          bodyLarge: TextStyle(color: AppColors.textColor),
+        ),
         useMaterial3: true,
       ),
       home: FutureBuilder<Widget>(
@@ -106,6 +126,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       FlutterLocalNotificationsPlugin();
   List<Map<String, dynamic>> schedule = [];
   List<bool> toggles = [];
+  final FlutterTts flutterTts = FlutterTts();
 
   @override
   void initState() {
@@ -184,27 +205,142 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  Widget _buildVisualIndicator({required bool isStart}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (isStart) Icon(Icons.flag, color: AppColors.shadowColor),
+          Container(
+            width: 160,
+            height: 6,
+            margin: EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          if (!isStart) Icon(Icons.flag, color: AppColors.shadowColor),
+        ],
+      ),
+    );
+  }
+
+  Future _speak(String text) async {
+    await flutterTts.setSpeechRate(0.5);
+    await flutterTts.setPitch(1.0);
+    await flutterTts.setVolume(1.0);
+    await flutterTts.speak(text);
+  }
+
+  Widget _buildDividerText(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12.0),
+      child: Center(
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 16,
+            fontStyle: FontStyle.italic,
+            color: Colors.grey[600],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Your Schedule")),
+      backgroundColor: Color(0xFFF9FAFB),
+      appBar: AppBar(
+        title: Text("Your Schedule"),
+        backgroundColor: Color(0xFF81C784),
+        elevation: 0,
+      ),
       body: ListView.builder(
-        itemCount: schedule.length,
+        itemCount: schedule.length + 2, // top + bottom indicators
         itemBuilder: (context, index) {
-          final item = schedule[index];
+          if (index == 0) return _buildVisualIndicator(isStart: true);
+          if (index == schedule.length + 1)
+            return _buildVisualIndicator(isStart: false);
+
+          final item = schedule[index - 1];
           final iconName = item['icon'];
-          return ListTile(
-            leading: iconName != null && iconMap[iconName] != null
-                ? Icon(iconMap[iconName])
-                : Icon(iconMap['default']),
-            title: Text(item['label'], style: TextStyle(fontSize: 18)),
-            trailing: Switch(
-              value: toggles[index],
-              onChanged: (val) => setState(() => toggles[index] = val),
+
+          return Container(
+            margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  iconName != null && iconMap[iconName] != null
+                      ? iconMap[iconName]
+                      : iconMap['default'],
+                  size: 28,
+                  color: Color(0xFF4CAF50),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    item['label'],
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.volume_up, color: Colors.blueGrey),
+                  onPressed: () => _speak(item['label']),
+                  tooltip: 'Read Aloud',
+                ),
+                Switch(
+                  value: toggles[index - 1],
+                  onChanged: (val) => setState(() => toggles[index - 1] = val),
+                  activeColor: Color(0xFF81C784),
+                ),
+              ],
             ),
           );
         },
       ),
     );
   }
+  // @override
+  // Widget build(BuildContext context) {
+  //   return Scaffold(
+  //     appBar: AppBar(title: Text("Your Schedule")),
+  //     body: ListView.builder(
+  //       itemCount: schedule.length,
+  //       itemBuilder: (context, index) {
+  //         final item = schedule[index];
+  //         final iconName = item['icon'];
+  //         return ListTile(
+  //           leading: iconName != null && iconMap[iconName] != null
+  //               ? Icon(iconMap[iconName])
+  //               : Icon(iconMap['default']),
+  //           title: Text(item['label'], style: TextStyle(fontSize: 18)),
+  //           trailing: Switch(
+  //             value: toggles[index],
+  //             onChanged: (val) => setState(() => toggles[index] = val),
+  //           ),
+  //         );
+  //       },
+  //     ),
+  //   );
+  // }
 }
