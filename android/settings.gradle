@@ -22,4 +22,22 @@ plugins {
     id "org.jetbrains.kotlin.android" version "1.8.22" apply false
 }
 
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        google()
+        mavenCentral()
+    }
+    versionCatalogs {
+        libs {
+            // fix build issue caused by flutter_local_notifications
+            library('bouncycastle', 'org.bouncycastle:bcprov-jdk18on:1.76')
+        }
+    }
+}
+
+
+rootProject.name = 'schedule_tracker'
+
+
 include ":app"

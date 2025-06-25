@@ -1,13 +1,22 @@
-allprojects {
+buildscript {
     repositories {
         google()
         mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.0'
     }
 }
 
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+    // avoid compilation errors via flutter_local_notifications
+    afterEvaluate { project ->
+        configurations.all {
+            exclude group: 'org.bouncycastle', module: 'bcprov-jdk18on'
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

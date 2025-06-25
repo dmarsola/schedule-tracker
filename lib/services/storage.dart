@@ -27,4 +27,15 @@ class StorageService {
       return null;
     }
   }
+
+  Future<void> deleteData() async {
+    try {
+      final file = await _localFile;
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      // Handle errors silently or log
+    }
+  }
 }

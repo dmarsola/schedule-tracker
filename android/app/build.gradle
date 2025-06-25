@@ -39,6 +39,16 @@ android {
             signingConfig = signingConfigs.debug
         }
     }
+
+    buildscript {
+        repositories {
+            google()
+            mavenCentral()
+        }
+        dependencies {
+            classpath 'com.android.tools.build:gradle:8.1.0' // your AGP version
+        }
+    }
 }
 
 dependencies {

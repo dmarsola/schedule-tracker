@@ -6,6 +6,9 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:provider/provider.dart';
+import 'package:schedule_tracker/providers/gesture_settings.dart';
+import 'package:schedule_tracker/widgets/access_secret.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'services/notification.dart';
@@ -40,7 +43,10 @@ class MyApp extends StatelessWidget {
   Future<Widget> _getInitialScreen() async {
     final data = await storage.loadData();
     if (data != null) {
-      return ScheduleScreen(scheduleData: data);
+      return ChangeNotifierProvider(
+        create: (_) => GestureSettings(),
+        child: ScheduleScreen(scheduleData: data),
+      );
     } else {
       return QRScannerScreen();
     }
@@ -255,7 +261,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Scaffold(
       backgroundColor: Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: Text("Your Schedule"),
+        title: SecretAccessWidget(
+          child: Text("Your Schedule"),
+        ),
         backgroundColor: Color(0xFF81C784),
         elevation: 0,
       ),
